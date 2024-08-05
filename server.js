@@ -256,7 +256,7 @@ server.post("/api/register-team", verifyToken, async (req, res) => {
       },
       teamRegistered: true,
       paymentStatus: "pending",
-      amountDue: formDetails.teamTotalPrice,
+      amountDue: formDetails.amountDue,
     });
 
     res.status(200).json({ message: "Team registered successfully" });
