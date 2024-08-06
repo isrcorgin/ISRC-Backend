@@ -100,24 +100,28 @@ server.post("/api/register", authLimiter, async (req, res) => {
   }
 
   try {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      password
-    );
-
+    // Register the user with Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
+    // Store user information in Firestore
     await set(dbRef(database, `users/${user.uid}`), {
       uid: user.uid,
       email: user.email,
     });
 
-    // send verification email
+    // Send email verification
     await sendEmailVerification(user);
 
+    // Generate a token for the user
     const token = jwt.sign({ uid: user.uid }, process.env.JWT_SECRET);
-    res.status(200).json({ message: "User registered successfully", token });
+
+    // Respond with a message indicating the verification email has been sent
+    res.status(200).json({
+      message: "Registration successful. A verification email has been sent.",
+      token,
+      emailVerified: user.emailVerified
+    });
   } catch (error) {
     if (error.code === "auth/email-already-in-use") {
       res.status(400).json({ message: "Email is already in use" });
@@ -127,7 +131,6 @@ server.post("/api/register", authLimiter, async (req, res) => {
     }
   }
 });
-
 // Login the User
 server.post("/api/login", authLimiter, async (req, res) => {
   const { email, password } = req.body;
@@ -146,7 +149,7 @@ server.post("/api/login", authLimiter, async (req, res) => {
 
     const token = jwt.sign({ uid: user.uid }, process.env.JWT_SECRET);
 
-    res.status(200).json({ message: "Login successful", token });
+    res.status(200).json({ message: "Login successful", token, emailVerified: user.emailVerified });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ message: "Error logging in", error });
@@ -368,6 +371,49 @@ server.post("/api/verify", verifyToken, paymentLimiter, async (req, res) => {
   } catch (error) {
     console.error("Payment verification error:", error); // Log error details for troubleshooting
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Resend Email Verification Endpoint
+server.post('/api/resend-verification', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  try {
+    // Check if the user exists in Firestore
+    const usersRef = collection(database, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const userDoc = querySnapshot.docs[0].data();
+
+    // Check if the user has a valid Firebase Auth user ID
+    if (!userDoc.uid) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Fetch the user from Firebase Auth
+    const user = await getUser(auth, userDoc.uid);
+
+    // Check if the email is already verified
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email is already verified' });
+    }
+
+    // Send email verification
+    await sendEmailVerification(user);
+    res.status(200).json({ message: 'Verification email sent successfully' });
+
+  } catch (error) {
+    console.error('Error resending verification email:', error);
+    res.status(500).json({ message: 'Error resending verification email', error });
   }
 });
 
