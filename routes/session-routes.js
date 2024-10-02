@@ -58,7 +58,7 @@ sessionFormRouter.post('/submit-session-form', async (req, res) => {
 sessionFormRouter.get('/get-all-session-forms', async (req, res) => {
   try {
       // Reference to the "SessionForms" node in the database
-      const sessionFormsRef = dbRef(database, 'sessionForms');
+      const sessionFormsRef = dbRef(database, 'certificationForms');
       
       // Retrieve all session forms
       const snapshot = await get(sessionFormsRef);
@@ -112,7 +112,7 @@ sessionFormRouter.post('/generate-one-certificate/:userId', async (req, res) => 
     
     try {
       // Reference to the user form data (assuming it's in 'sessionForms' node)
-      const userFormRef = dbRef(database, `sessionForms/${userId}`);
+      const userFormRef = dbRef(database, `certificationForms/${userId}`);
       const userSnapshot = await get(userFormRef);
       console.log(userSnapshot.exists());
       
@@ -122,7 +122,7 @@ sessionFormRouter.post('/generate-one-certificate/:userId', async (req, res) => 
       }
   
       const userData = userSnapshot.val();
-      const { name } = userData; // Extract the user's name from form data
+      const { name,whatsapp } = userData; // Extract the user's name from form data
   
       // Check if a certificate is already generated for the user
       const alreadyGenerated = await isCertificateGenerated(userId);
@@ -133,12 +133,11 @@ sessionFormRouter.post('/generate-one-certificate/:userId', async (req, res) => 
       // Generate a new certificate with an auth code
       const authCode = generateAuthCode();
       const certData = {
-        userId,
         name, // Include the user's name
-        type: 'SEC', // Set the type as 'SEC'
+        whatsapp,
+        type: 'sec', // Set the type as 'SEC'
         authCode,
         
-        Date: "21 September 2024",
         // new Date().toISOString()
       };
   
@@ -157,7 +156,7 @@ sessionFormRouter.post('/generate-one-certificate/:userId', async (req, res) => 
 sessionFormRouter.post('/generate-all-certificates', async (req, res) => {
     try {
       // Reference to the "SessionForms" node in the database
-      const sessionFormsRef = dbRef(database, 'sessionForms');
+      const sessionFormsRef = dbRef(database, 'certificationForms');
       const snapshot = await get(sessionFormsRef);
   
       if (!snapshot.exists()) {
@@ -170,7 +169,7 @@ sessionFormRouter.post('/generate-all-certificates', async (req, res) => {
       // Loop through all users
       for (const userId in sessionForms) {
         const userData = sessionForms[userId];
-        const { name } = userData; // Extract user's name from form data
+        const { name,whatsapp } = userData; // Extract user's name from form data
   
         // Check if a certificate already exists for this user
         const alreadyGenerated = await isCertificateGenerated(userId);
@@ -182,11 +181,10 @@ sessionFormRouter.post('/generate-all-certificates', async (req, res) => {
         // Generate a new certificate with an auth code
         const authCode = generateAuthCode();
         const certData = {
-          userId,
           name, // Include the user's name
-          type: 'SEC', // Set the type as 'SEC'
+          type: 'sec', // Set the type as 'SEC'
           authCode,
-          Date : "21 September 2024",
+          whatsapp,
         };
   
         // Save the certificate under the new node "certificates"
