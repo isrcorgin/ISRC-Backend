@@ -499,6 +499,9 @@ givenRouts.get("/getMockRank", verifyToken, async (req, res) => {
 
     // Generate random rank based on userMarks
     let rank;
+    if(userMarks==100){
+      rank=1;
+    }
     if (userMarks >= 80 && userMarks <= 100) {
       // Random 3-digit rank (from 100 to 999)
       rank = Math.floor(Math.random() * 900) + 100;
