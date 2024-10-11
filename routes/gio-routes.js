@@ -245,14 +245,6 @@ givenRouts.post("/gio-payment/confirm", paymentLimiter, verifyToken, async (req,
   });
   
 
-// givenRouts.post("/getpaymentstatus",verifyToken,async(Req,res)=>{
-//     try {
-        
-//     } catch (error) {
-        
-//     }
-// })
-
 givenRouts.get('/canattempt', verifyToken, async (req, res) => {
     const userId = req.user.uid;
   
@@ -287,7 +279,6 @@ givenRouts.get('/canattempt', verifyToken, async (req, res) => {
     }
   });
   
-
 
   
 
@@ -599,7 +590,39 @@ givenRouts.get("/getGlobalRank", verifyToken, async (req, res) => {
 });
 
 
+givenRouts.get('/gio-registered-users', async (req, res) => {
+  try {
+      // Reference to the "gio-event" node in the database where all registrations are stored
+      const registrationsRef = dbRef(database, 'gio-event');
 
+      // Retrieve all registered users from the database
+      const snapshot = await get(registrationsRef);
+
+      if (snapshot.exists()) {
+          const registrations = snapshot.val();
+
+          // Filter the registrations to include only registered users (with `isRegistered` set to true)
+          const registeredUsers = Object.keys(registrations).reduce((acc, userId) => {
+              if (registrations[userId].isregisterd) {
+                  acc[userId] = registrations[userId]; // Include only registered users
+              }
+              return acc;
+          }, {});
+
+          if (Object.keys(registeredUsers).length > 0) {
+              // Return all registered users
+              res.status(200).json({ registeredUsers });
+          } else {
+              res.status(404).json({ message: 'No registered users found' });
+          }
+      } else {
+          res.status(404).json({ message: 'No registrations found' });
+      }
+  } catch (error) {
+      console.error('Error retrieving registered users:', error);
+      res.status(500).json({ message: 'Failed to retrieve registered users', error: error.message });
+  }
+});
 
 
 
