@@ -244,41 +244,142 @@ givenRouts.post("/gio-payment/confirm", paymentLimiter, verifyToken, async (req,
     }
   });
   
-
-givenRouts.get('/canattempt', verifyToken, async (req, res) => {
+  givenRouts.get('/canattempt', verifyToken, async (req, res) => {
     const userId = req.user.uid;
-  
+
     try {
-      // Reference to the payments node for the user
-      const paymentsRef = dbRef(database, `gio-event/${userId}/payments`);
-      
-      // Fetch all payment entries
-      const snapshot = await get(paymentsRef);
-      
-      // If no payment node exists, assume user hasn't paid
-      if (!snapshot.exists()) {
-        return res.status(200).json({ canAttempt: false, hasPaid: false });
-      }
-  
-      const payments = snapshot.val();
-      let canAttempt = false;
-      // Check if any payment node has canAttempt set to true
-      for (const key in payments) {
-        if (payments[key].canAttempt === true) {
-          canAttempt = true;
-          break; // If any node has canAttempt as true, stop further iteration
+        // Reference to both payments nodes for the user
+        const paymentsRef = dbRef(database, `gio-event/${userId}/payments`);
+        const internationalPaymentsRef = dbRef(database, `gio-event/${userId}/international-payments`);
+        
+        // Try to fetch payment entries from the payments node first
+        let snapshot = await get(paymentsRef);
+        
+        // If the payments node does not exist, check the international payments node
+        if (!snapshot.exists()) {
+            snapshot = await get(internationalPaymentsRef);
         }
+        
+        // If neither node exists, assume user hasn't paid
+        if (!snapshot.exists()) {
+            return res.status(200).json({ canAttempt: false, hasPaid: false });
+        }
+
+        const payments = snapshot.val();
+        const canAttempt = Object.values(payments).some(payment => payment.canAttempt === true);
+
+        return res.status(200).json({ canAttempt });
+    } catch (error) {
+        console.error("Error checking payment status: ", error);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Initialize international payment
+givenRouts.post("/international-gio-payment/create", paymentLimiter, verifyToken, async (req, res) => {
+  const { amount } = req.body;
+  const userId = req.user.uid;
+
+  // Validate amount
+  if (!amount) {
+    return res.status(400).json({
+      statusCode: 400,
+      error: {
+        code: "BAD_REQUEST_ERROR",
+        description: "amount: is required.",
+        reason: "input_validation_failed",
+        source: "business",
+        step: "payment_initiation",
+      },
+    });
+  }
+
+  try {
+    // Prepare options for Razorpay, using USD as currency
+    const options = {
+      amount: Number(amount) * 100, // Convert to cents (Razorpay uses smallest unit)
+      currency: "USD", // Change to USD
+      receipt: crypto.randomBytes(10).toString("hex"),
+    };
+
+    // Create order with Razorpay
+    razorpayInstance.orders.create(options, async (err, order) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to create order" });
       }
 
+      // Prepare payment details
+      const paymentDetails = {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        receipt: order.receipt,
+        status: order.status,
+        createdAt: new Date(order.created_at * 1000), // Convert timestamp to JavaScript date
+        isPaid: false, // Set to false initially until confirmed
+      };
 
-      // If there are payment nodes but none allows attempting
-      return res.status(200).json({ canAttempt });
-    } catch (error) {
-      console.error("Error checking payment status: ", error);
-      return res.status(500).json({ error: "Internal server error" });
-    }
-  });
-  
+      // Store payment details under user's node
+      try {
+        const userPaymentsRef = dbRef(database, `gio-event/${userId}/international-payments/${order.id}`); // Use order.id as key
+        await set(userPaymentsRef, paymentDetails); // Store payment details
+
+        return res.status(200).json({ data: order });
+      } catch (dbError) {
+        console.error("Database Error: ", dbError);
+        return res.status(500).json({ error: "Failed to save payment details in database" });
+      }
+    });
+  } catch (error) {
+    console.error('Internal Server Error:', error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Confirm international payment
+givenRouts.post("/international-gio-payment/confirm", paymentLimiter, verifyToken, async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id } = req.body;
+  const userId = req.user.uid; // Extract UID from the verified token
+
+  // Validate required parameters
+  if (!razorpay_order_id || !razorpay_payment_id) {
+    return res.status(400).json({
+      statusCode: 400,
+      error: {
+        code: "BAD_REQUEST_ERROR",
+        description: "razorpay_order_id and razorpay_payment_id are required.",
+        reason: "input_validation_failed",
+        source: "business",
+        step: "payment_confirmation",
+      },
+    });
+  }
+
+  try {
+    // Prepare payment details
+    const paymentDetails = {
+      razorpay_order_id,
+      razorpay_payment_id,
+      isPaid: true, // Mark as paid
+      paidAt: new Date(),
+      canAttempt: true, // Mark user as eligible to attempt
+    };
+
+    // Find the payment node in the database using the Razorpay order ID
+    const paymentRef = dbRef(database, `gio-event/${userId}/international-payments/${razorpay_order_id}`);
+    await update(paymentRef, paymentDetails); // Update payment status
+
+    return res.status(200).json({
+      status: "Payment confirmed successfully",
+      razorpay_order_id,
+      razorpay_payment_id,
+    });
+  } catch (dbError) {
+    console.error("Database Error: ", dbError);
+    return res.status(500).json({ error: "Failed to confirm payment in database" });
+  }
+});
 
   
 
