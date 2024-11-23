@@ -47,29 +47,20 @@ const server = express();
 server.set("trust proxy", 1);
 const upload = multer({ storage: multer.memoryStorage() });
 // CORS setup
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://isrc.org.in",
-  "https://www.isrc.org.in",
-];
+const corsOptions = {
+  origin: [
+    "https://isrc.org.in",
+    "https://www.isrc.org.in",
+    "http://localhost:3000",
+  ], // Allowed domains
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // Required for cookies, Authorization headers with HTTPS
+};
 
-server.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
-
-// Handle preflight requests
-server.options("*", cors());
+// Place CORS middleware at the top
+server.use(cors(corsOptions));
+server.options("*", cors(corsOptions)); // Handle preflight
 
 server.use(express.json()); // Built-in body-parser for JSON
 server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
