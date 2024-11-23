@@ -46,12 +46,31 @@ const server = express();
 // Trust the first proxy
 server.set("trust proxy", 1);
 const upload = multer({ storage: multer.memoryStorage() });
+// CORS setup
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://isrc.org.in",
+  "https://www.isrc.org.in",
+];
 
-server.use(cors({
-  origin: ["http://localhost:3000", "https://isrc.org.in/"], // Replace with your frontend URLs
-  methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
-  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
-}));
+server.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// Handle preflight requests
+server.options("*", cors());
+
 server.use(express.json()); // Built-in body-parser for JSON
 server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
 server.use(bodyParser.json());
@@ -161,13 +180,11 @@ server.post("/api/login", authLimiter, async (req, res) => {
 
     const token = jwt.sign({ uid: user.uid }, process.env.JWT_SECRET);
 
-    res
-      .status(200)
-      .json({
-        message: "Login successful",
-        token,
-        emailVerified: user.emailVerified,
-      });
+    res.status(200).json({
+      message: "Login successful",
+      token,
+      emailVerified: user.emailVerified,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error logging in", error });
   }
@@ -332,12 +349,10 @@ server.post(
           await set(userRef, userData);
 
           memberFound = true;
-          res
-            .status(200)
-            .json({
-              message: "Profile image updated successfully",
-              downloadURL,
-            });
+          res.status(200).json({
+            message: "Profile image updated successfully",
+            downloadURL,
+          });
           break;
         }
       }
