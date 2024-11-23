@@ -1,15 +1,15 @@
-import express from 'express';
-import multer from 'multer';
-import sharp from 'sharp';
-import cors from 'cors';
-import jwt from "jsonwebtoken"
-import bodyParser from 'body-parser';
-import crypto from 'crypto';
-import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
-import verifyToken from './middleware/authToken.js';
-import adminRouter from './routes/admin-routes.js';
+import express from "express";
+import multer from "multer";
+import sharp from "sharp";
+import cors from "cors";
+import jwt from "jsonwebtoken";
+import bodyParser from "body-parser";
+import crypto from "crypto";
+import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import verifyToken from "./middleware/authToken.js";
+import adminRouter from "./routes/admin-routes.js";
 
 import {
   auth,
@@ -28,26 +28,30 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
-} from './config/firebase-config.js';
-import razorpayInstance from './config/razorpay-config.js';
-import markingRouter from './routes/marking-routes.js';
-import generateTeamCertificates from './utils/generateTeamMembersCertificate.js';
-import formRouter from './routes/awardForm-routes.js';
-import sessionFormRouter from './routes/session-routes.js';
-import givenRouts from './routes/gio-routes.js';
-import internshipFormRouter from './routes/internship-routes.js';
-import certificationFormRouter from './routes/certification-routes.js';
-
+} from "./config/firebase-config.js";
+import razorpayInstance from "./config/razorpay-config.js";
+import markingRouter from "./routes/marking-routes.js";
+import generateTeamCertificates from "./utils/generateTeamMembersCertificate.js";
+import formRouter from "./routes/awardForm-routes.js";
+import awardRouter from "./routes/award-routes.js";
+import sessionFormRouter from "./routes/session-routes.js";
+import givenRouts from "./routes/gio-routes.js";
+import internshipFormRouter from "./routes/internship-routes.js";
+import certificationFormRouter from "./routes/certification-routes.js";
 
 // load .env
-dotenv.config()
+dotenv.config();
 
 const server = express();
 // Trust the first proxy
 server.set("trust proxy", 1);
 const upload = multer({ storage: multer.memoryStorage() });
 
-server.use(cors());
+server.use(cors({
+  origin: ["http://localhost:3000", "https://isrc.org.in/"], // Replace with your frontend URLs
+  methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
+  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+}));
 server.use(express.json()); // Built-in body-parser for JSON
 server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
 server.use(bodyParser.json());
@@ -78,18 +82,19 @@ const paymentLimiter = rateLimit({
   message: "Too many payment attempts, please try again later.",
 });
 
-// admin routes 
+// admin routes
 server.use("/api/admin", adminRouter);
 
 // marking routes
 server.use("/api/marking", markingRouter);
 
 // form routes
-server.use("/api/forms", formRouter)
-server.use("/api/sessionForm",sessionFormRouter)
-server.use("/api/gio-event",givenRouts)
-server.use("/api/intern-form", internshipFormRouter)
-server.use('/api/certificationForm', certificationFormRouter);
+server.use("/api/forms", formRouter);
+server.use("/api/awards", awardRouter);
+server.use("/api/sessionForm", sessionFormRouter);
+server.use("/api/gio-event", givenRouts);
+server.use("/api/intern-form", internshipFormRouter);
+server.use("/api/certificationForm", certificationFormRouter);
 server.get("/", (req, res) => {
   res.send("App is working");
 });
@@ -104,7 +109,11 @@ server.post("/api/register", authLimiter, async (req, res) => {
 
   try {
     // Register the user with Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
     const user = userCredential.user;
 
     // Store user information in Firestore
@@ -123,7 +132,7 @@ server.post("/api/register", authLimiter, async (req, res) => {
     res.status(200).json({
       message: "Registration successful. A verification email has been sent.",
       token,
-      emailVerified: user.emailVerified
+      emailVerified: user.emailVerified,
     });
   } catch (error) {
     if (error.code === "auth/email-already-in-use") {
@@ -152,7 +161,13 @@ server.post("/api/login", authLimiter, async (req, res) => {
 
     const token = jwt.sign({ uid: user.uid }, process.env.JWT_SECRET);
 
-    res.status(200).json({ message: "Login successful", token, emailVerified: user.emailVerified });
+    res
+      .status(200)
+      .json({
+        message: "Login successful",
+        token,
+        emailVerified: user.emailVerified,
+      });
   } catch (error) {
     res.status(500).json({ message: "Error logging in", error });
   }
@@ -176,7 +191,6 @@ server.post("/api/forgot-password", authLimiter, async (req, res) => {
   }
 });
 
-
 // Get the user Data
 server.get("/api/user-profile", verifyToken, async (req, res) => {
   const uid = req.user.uid;
@@ -192,13 +206,10 @@ server.get("/api/user-profile", verifyToken, async (req, res) => {
       res.status(404).json({ message: "User not found" });
     }
   } catch (error) {
-    console.log(error)
+    console.log(error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
-
-
 
 // Team registration form
 server.post("/api/register-team", verifyToken, async (req, res) => {
@@ -237,7 +248,7 @@ server.post("/api/register-team", verifyToken, async (req, res) => {
           age: formDetails.mentorAge,
           email: formDetails.mentorEmail,
           phone: formDetails.mentorPhone,
-          WhatsApp: formDetails.mentorWhatsApp
+          WhatsApp: formDetails.mentorWhatsApp,
         },
         members: teamMembers,
       },
@@ -254,75 +265,92 @@ server.post("/api/register-team", verifyToken, async (req, res) => {
 });
 
 // Route to update the profile Image of the members
-server.post("/api/upload-profile-image", verifyToken, upload.single("profileImage"), async (req, res) => {
-  const { uid } = req.user;
-  const { memberName } = req.body;
-  const file = req.file;
+server.post(
+  "/api/upload-profile-image",
+  verifyToken,
+  upload.single("profileImage"),
+  async (req, res) => {
+    const { uid } = req.user;
+    const { memberName } = req.body;
+    const file = req.file;
 
-  if (!memberName || !file) {
-    return res.status(400).json({ message: "Member name and profile image are required" });
-  }
-
-  try {
-    // Find the user based on uid
-    const userRef = dbRef(database, `users/${uid}`);
-    const userSnapshot = await get(userRef);
-
-    if (!userSnapshot.exists()) {
-      return res.status(404).json({ message: "User not found" });
+    if (!memberName || !file) {
+      return res
+        .status(400)
+        .json({ message: "Member name and profile image are required" });
     }
 
-    const userData = userSnapshot.val();
-    const teamMembers = userData.team?.members || [];
-    let memberFound = false;
+    try {
+      // Find the user based on uid
+      const userRef = dbRef(database, `users/${uid}`);
+      const userSnapshot = await get(userRef);
 
-    // Search for the member by name
-    for (const member of teamMembers) {
-      if (member.name.toLowerCase() === memberName.toLowerCase()) {
-        // Check if there is an existing profile image and delete it
-        if (member.profileImageUrl) {
-          // Extract the image path from the URL
-          const encodedImagePath = member.profileImageUrl.split('/o/')[1].split('?')[0]; // URL-encoded path
-          const imagePath = decodeURIComponent(encodedImagePath); // Decode the URL-encoded path
-
-          // Create a reference to the image in Firebase Storage
-          const imageRef = ref(storage, imagePath);
-
-          // Delete the image from Firebase Storage
-          await deleteObject(imageRef);
-        }
-
-        // Optimize the image using sharp
-        const optimizedBuffer = await sharp(file.buffer)
-          .resize(300, 300) // Resize the image to 300x300 pixels
-          .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
-          .toBuffer();
-
-        // Upload the optimized profile image to Firebase Storage
-        const storageRef = ref(storage, `profile-images/${Date.now()}-${file.originalname}`);
-        const snapshot = await uploadBytes(storageRef, optimizedBuffer);
-        const downloadURL = await getDownloadURL(snapshot.ref);
-
-        // Update the member's profile image URL in the database
-        member.profileImageUrl = downloadURL;
-
-        // Save the updated user data
-        await set(userRef, userData);
-
-        memberFound = true;
-        res.status(200).json({ message: "Profile image updated successfully", downloadURL });
-        break;
+      if (!userSnapshot.exists()) {
+        return res.status(404).json({ message: "User not found" });
       }
-    }
 
-    if (!memberFound) {
-      res.status(404).json({ message: "Member not found" });
+      const userData = userSnapshot.val();
+      const teamMembers = userData.team?.members || [];
+      let memberFound = false;
+
+      // Search for the member by name
+      for (const member of teamMembers) {
+        if (member.name.toLowerCase() === memberName.toLowerCase()) {
+          // Check if there is an existing profile image and delete it
+          if (member.profileImageUrl) {
+            // Extract the image path from the URL
+            const encodedImagePath = member.profileImageUrl
+              .split("/o/")[1]
+              .split("?")[0]; // URL-encoded path
+            const imagePath = decodeURIComponent(encodedImagePath); // Decode the URL-encoded path
+
+            // Create a reference to the image in Firebase Storage
+            const imageRef = ref(storage, imagePath);
+
+            // Delete the image from Firebase Storage
+            await deleteObject(imageRef);
+          }
+
+          // Optimize the image using sharp
+          const optimizedBuffer = await sharp(file.buffer)
+            .resize(300, 300) // Resize the image to 300x300 pixels
+            .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
+            .toBuffer();
+
+          // Upload the optimized profile image to Firebase Storage
+          const storageRef = ref(
+            storage,
+            `profile-images/${Date.now()}-${file.originalname}`
+          );
+          const snapshot = await uploadBytes(storageRef, optimizedBuffer);
+          const downloadURL = await getDownloadURL(snapshot.ref);
+
+          // Update the member's profile image URL in the database
+          member.profileImageUrl = downloadURL;
+
+          // Save the updated user data
+          await set(userRef, userData);
+
+          memberFound = true;
+          res
+            .status(200)
+            .json({
+              message: "Profile image updated successfully",
+              downloadURL,
+            });
+          break;
+        }
+      }
+
+      if (!memberFound) {
+        res.status(404).json({ message: "Member not found" });
+      }
+    } catch (error) {
+      console.error("Error updating profile image:", error);
+      res.status(500).json({ message: "Error updating profile image", error });
     }
-  } catch (error) {
-    console.error("Error updating profile image:", error);
-    res.status(500).json({ message: "Error updating profile image", error });
   }
-});
+);
 
 // Payment Gateway
 server.post("/api/payment", paymentLimiter, (req, res) => {
@@ -365,7 +393,8 @@ server.post("/api/payment", paymentLimiter, (req, res) => {
 // Payment Verification
 server.post("/api/verify", verifyToken, paymentLimiter, async (req, res) => {
   const { uid } = req.user;
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } =
+    req.body;
 
   try {
     if (
@@ -415,11 +444,13 @@ server.post("/api/verify", verifyToken, paymentLimiter, async (req, res) => {
         // Update user data with payment details
         await set(userRef, updatedUserData);
 
-        await generateTeamCertificates(userData)
+        await generateTeamCertificates(userData);
       }
 
       // Send success response
-      return res.status(200).json({ message: "Payment verified and saved successfully" });
+      return res
+        .status(200)
+        .json({ message: "Payment verified and saved successfully" });
     } else {
       // Payment verification failed
       return res.status(400).json({ message: "Payment verification failed" });
@@ -430,47 +461,53 @@ server.post("/api/verify", verifyToken, paymentLimiter, async (req, res) => {
   }
 });
 // Resend Email Verification Endpoint
-server.post('/api/resend-verification', async (req, res) => {
+server.post("/api/resend-verification", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+    return res.status(400).json({ message: "Email and password are required" });
   }
 
   try {
-
     // Sign in the user with email and password to get the user credential
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
     const user = userCredential.user;
 
     // Check if the email is already verified
     if (user.emailVerified) {
-      return res.status(400).json({ message: 'Email is already verified' });
+      return res.status(400).json({ message: "Email is already verified" });
     }
 
     // Now that the user is authenticated, query the Realtime Database
-    const usersRef = dbRef(database, 'users');
+    const usersRef = dbRef(database, "users");
     const snapshot = await get(usersRef);
 
     if (!snapshot.exists()) {
-      return res.status(404).json({ message: 'No users found' });
+      return res.status(404).json({ message: "No users found" });
     }
 
     const usersData = snapshot.val();
-    const userKey = Object.keys(usersData).find(key => usersData[key].email === email);
+    const userKey = Object.keys(usersData).find(
+      (key) => usersData[key].email === email
+    );
 
     if (!userKey) {
-      return res.status(404).json({ message: 'User not found in database' });
+      return res.status(404).json({ message: "User not found in database" });
     }
 
     // Send email verification
     await sendEmailVerification(user);
 
-    res.status(200).json({ message: 'Verification email sent successfully' });
-
+    res.status(200).json({ message: "Verification email sent successfully" });
   } catch (error) {
-    console.error('Error resending verification email:', error);
-    res.status(500).json({ message: 'Error resending verification email', error });
+    console.error("Error resending verification email:", error);
+    res
+      .status(500)
+      .json({ message: "Error resending verification email", error });
   }
 });
 // Get the User Details
@@ -598,9 +635,13 @@ server.post("/api/verify-certificate", async (req, res) => {
       }
 
       // If no matching authCode is found
-      return res.status(404).json({ message: "No record found for this Auth Code" });
+      return res
+        .status(404)
+        .json({ message: "No record found for this Auth Code" });
     } else {
-      return res.status(404).json({ message: "No records found in the database" });
+      return res
+        .status(404)
+        .json({ message: "No records found in the database" });
     }
   } catch (error) {
     console.error("Error fetching data:", error);
