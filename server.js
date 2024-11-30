@@ -44,21 +44,49 @@ dotenv.config();
 
 const server = express();
 
-// Trust the first proxy
-// server.set("trust proxy", 1);
-server.use(cors())
+// Configure CORS
+const allowedOrigins = ['https://isrc.org.in'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Check if the origin is in the allowedOrigins list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin); // Return the specific origin
+    } else {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+// Apply CORS middleware
+server.use(cors(corsOptions));
+
+
+// Multer setup for in-memory file storage
 const upload = multer({ storage: multer.memoryStorage() });
-// CORS setup
 
-
-// Handle preflight requests globally
-
-server.use(express.json()); // Built-in body-parser for JSON
-server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
+// Body parsers
+server.use(express.json());
+server.use(express.urlencoded({ extended: true }));
 server.use(bodyParser.json());
 
-// API Security
+// Security Headers
 server.use(helmet());
+
+// Handle preflight requests (OPTIONS)
+server.options('*', cors());
+
+// Define routes here
+server.get('/', (req, res) => {
+  res.send('Server is running');
+});
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
