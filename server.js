@@ -43,13 +43,13 @@ import certificationFormRouter from "./routes/certification-routes.js";
 dotenv.config();
 
 const server = express();
+
 // Trust the first proxy
-server.set("trust proxy", 1);
+// server.set("trust proxy", 1);
+server.use(cors())
 const upload = multer({ storage: multer.memoryStorage() });
 // CORS setup
 
-
-server.use(cors());
 
 // Handle preflight requests globally
 
