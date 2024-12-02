@@ -47,25 +47,28 @@ const server = express();
 server.set("trust proxy", 1);
 const upload = multer({ storage: multer.memoryStorage() });
 // CORS setup
-const allowedOrigins = ["https://isrc.org.in", "https://www.isrc.org.in"];
 
-server.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+// Dynamic CORS setup
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : []; // Ensure no fallback to localhost in production
 
-// Handle preflight requests globally
-server.options("*", cors());
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (allowedOrigins.length === 0) {
+      callback(new Error("CORS misconfiguration: No allowed origins set."));
+    } else if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true); // Allow the request
+    } else {
+      callback(new Error("Not allowed by CORS")); // Block the request
+    }
+  },
+  credentials: true, // Allow credentials (cookies, Authorization headers, etc.)
+};
+
+// Use CORS middleware
+server.use(cors(corsOptions));
+server.options("*", cors(corsOptions)); // Handle preflight requests
 
 server.use(express.json()); // Built-in body-parser for JSON
 server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
