@@ -50,7 +50,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 
 
-const allowedOrigins = ["https://isrc.org.in" , "https://www.isrc.org.in"]; // Hardcode the allowed origins here
+const allowedOrigins = ["https://www.isrc.org.in"]; // Hardcode the allowed origins here
 
 const corsOptions = {
   origin: function (origin, callback) {
