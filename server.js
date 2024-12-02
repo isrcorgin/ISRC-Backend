@@ -51,7 +51,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Dynamic CORS setup
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
-  : []; // Ensure no fallback to localhost in production
+  : ["https://isrc.org.in"]; // Ensure no fallback to localhost in production
 
 const corsOptions = {
   origin: function (origin, callback) {
