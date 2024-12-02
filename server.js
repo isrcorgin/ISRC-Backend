@@ -49,9 +49,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // CORS setup
 
 // Dynamic CORS setup
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
-  : ["https://isrc.org.in"]; // Ensure no fallback to localhost in production
+const allowedOrigins = ["https://isrc.org.in"]; // Hardcode the allowed origins here
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -69,6 +67,7 @@ const corsOptions = {
 // Use CORS middleware
 server.use(cors(corsOptions));
 server.options("*", cors(corsOptions)); // Handle preflight requests
+
 
 server.use(express.json()); // Built-in body-parser for JSON
 server.use(express.urlencoded({ extended: true })); // Built-in body-parser for URL-encoded data
