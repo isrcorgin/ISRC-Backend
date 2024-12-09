@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import sharp from "sharp";
-import cors from "cors";
+
 import jwt from "jsonwebtoken";
 import bodyParser from "body-parser";
 import crypto from "crypto";
